@@ -1,0 +1,68 @@
+name: trend-tracker
+
+# Runs once a day on GitHub's servers (free), so your laptop doesn't need to be on.
+# History lives on an orphan `data` branch that is force-pushed each run, so the
+# repo never bloats. The JSON outputs are published to GitHub Pages = your own API.
+on:
+  schedule:
+    - cron: "17 15 * * *"   # 15:17 UTC daily = 7:17am PST / 8:17am PDT
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: trend-tracker
+  cancel-in-progress: false
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore history from data branch
+        run: |
+          mkdir -p data
+          if git ls-remote --exit-code origin data >/dev/null 2>&1; then
+            git fetch origin data --depth=1
+            git show origin/data:trends.db > data/trends.db
+          fi
+
+      - name: Collect + score
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK" ]; then N=--notify; else N=; fi
+          python run.py all $N
+
+      - name: Save history to data branch
+        run: |
+          cp data/trends.db /tmp/trends.db
+          cd "$(mktemp -d)"
+          git init -q -b data
+          cp /tmp/trends.db .
+          git -c user.name=tracker -c user.email=tracker@users.noreply.github.com \
+            add trends.db
+          git -c user.name=tracker -c user.email=tracker@users.noreply.github.com \
+            commit -qm "snapshot $(date -u +%FT%H:00Z)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" data
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: track
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4

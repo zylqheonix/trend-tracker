@@ -1,0 +1,12 @@
+{
+  "keep_tracking_days": 14,
+  "history_days": 90,
+  "roblox_cap": 1500,
+  "steam_cap": 600,
+  "steam_meta_per_run": 150,
+  "steam_reviews_every_h": 1,
+  "watchlist": {
+    "roblox": [],
+    "steam": []
+  }
+}
